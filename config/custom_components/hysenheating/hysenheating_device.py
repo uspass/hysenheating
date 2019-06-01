@@ -1,14 +1,357 @@
 """
-Hysen Heating Thermostat Controller Interface
-Hysen HY03-1-Wifi device and derivative
-http://www.xmhysen.com/products_detail/productId=197.html
+Class Broadlink device
+Based on the work from
+https://github.com/mjg59/python-broadlink
 """
 
-from broadlink import device
-import logging
+import random
+import socket
+import threading
+import time
 from PyCRC.CRC16 import CRC16
 
+try:
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.backends import default_backend
+except ImportError:
+    import pyaes
+
+import logging
+
 _LOGGER = logging.getLogger(__name__)
+
+class broadlink_device:
+    def __init__(self, host, mac, devtype, timeout=10):
+        self.host = host
+        self.mac = mac.encode() if isinstance(mac, str) else mac
+        self.devtype = devtype
+        self.timeout = timeout
+        self.count = random.randrange(0xffff)
+        self.iv = bytearray(
+            [0x56, 0x2e, 0x17, 0x99, 0x6d, 0x09, 0x3d, 0x28, 0xdd, 0xb3, 0xba, 0x69, 0x5a, 0x2e, 0x6f, 0x58])
+        self.id = bytearray([0, 0, 0, 0])
+        self.cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.cs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.cs.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        self.cs.bind(('', 0))
+        self.type = "Unknown"
+        self.lock = threading.Lock()
+
+        if 'pyaes' in globals():
+            self.encrypt = self.encrypt_pyaes
+            self.decrypt = self.decrypt_pyaes
+            self.update_aes = self.update_aes_pyaes
+
+        else:
+            self.encrypt = self.encrypt_crypto
+            self.decrypt = self.decrypt_crypto
+            self.update_aes = self.update_aes_crypto
+
+        self.aes = None
+        key = bytearray(
+            [0x09, 0x76, 0x28, 0x34, 0x3f, 0xe9, 0x9e, 0x23, 0x76, 0x5c, 0x15, 0x13, 0xac, 0xcf, 0x8b, 0x02])
+        self.update_aes(key)
+
+    def update_aes_pyaes(self, key):
+        self.aes = pyaes.AESModeOfOperationCBC(key, iv=bytes(self.iv))
+
+    def encrypt_pyaes(self, payload):
+        return b"".join([self.aes.encrypt(bytes(payload[i:i + 16])) for i in range(0, len(payload), 16)])
+
+    def decrypt_pyaes(self, payload):
+        return b"".join([self.aes.decrypt(bytes(payload[i:i + 16])) for i in range(0, len(payload), 16)])
+
+    def update_aes_crypto(self, key):
+        self.aes = Cipher(algorithms.AES(key), modes.CBC(self.iv),
+                          backend=default_backend())
+
+    def encrypt_crypto(self, payload):
+        encryptor = self.aes.encryptor()
+        return encryptor.update(payload) + encryptor.finalize()
+
+    def decrypt_crypto(self, payload):
+        decryptor = self.aes.decryptor()
+        return decryptor.update(payload) + decryptor.finalize()
+
+    def auth(self):
+        payload = bytearray(0x50)
+        payload[0x04] = 0x31
+        payload[0x05] = 0x31
+        payload[0x06] = 0x31
+        payload[0x07] = 0x31
+        payload[0x08] = 0x31
+        payload[0x09] = 0x31
+        payload[0x0a] = 0x31
+        payload[0x0b] = 0x31
+        payload[0x0c] = 0x31
+        payload[0x0d] = 0x31
+        payload[0x0e] = 0x31
+        payload[0x0f] = 0x31
+        payload[0x10] = 0x31
+        payload[0x11] = 0x31
+        payload[0x12] = 0x31
+        payload[0x1e] = 0x01
+        payload[0x2d] = 0x01
+        payload[0x30] = ord('T')
+        payload[0x31] = ord('e')
+        payload[0x32] = ord('s')
+        payload[0x33] = ord('t')
+        payload[0x34] = ord(' ')
+        payload[0x35] = ord(' ')
+        payload[0x36] = ord('1')
+
+        response = self.send_packet(0x65, payload)
+
+        payload = self.decrypt(response[0x38:])
+
+        if not payload:
+            return False
+
+        key = payload[0x04:0x14]
+        if len(key) % 16 != 0:
+            return False
+
+        self.id = payload[0x00:0x04]
+        self.update_aes(key)
+
+        return True
+
+    def send_packet(self, command, payload):
+        self.count = (self.count + 1) & 0xffff
+        packet = bytearray(0x38)
+        packet[0x00] = 0x5a
+        packet[0x01] = 0xa5
+        packet[0x02] = 0xaa
+        packet[0x03] = 0x55
+        packet[0x04] = 0x5a
+        packet[0x05] = 0xa5
+        packet[0x06] = 0xaa
+        packet[0x07] = 0x55
+        packet[0x24] = 0x2a
+        packet[0x25] = 0x27
+        packet[0x26] = command
+        packet[0x28] = self.count & 0xff
+        packet[0x29] = self.count >> 8
+        packet[0x2a] = self.mac[0]
+        packet[0x2b] = self.mac[1]
+        packet[0x2c] = self.mac[2]
+        packet[0x2d] = self.mac[3]
+        packet[0x2e] = self.mac[4]
+        packet[0x2f] = self.mac[5]
+        packet[0x30] = self.id[0]
+        packet[0x31] = self.id[1]
+        packet[0x32] = self.id[2]
+        packet[0x33] = self.id[3]
+
+        # pad the payload for AES encryption
+        if payload:
+            numpad = (len(payload) // 16 + 1) * 16
+            payload = payload.ljust(numpad, b"\x00")
+
+        checksum = 0xbeaf
+        for i in range(len(payload)):
+            checksum += payload[i]
+            checksum = checksum & 0xffff
+
+        payload = self.encrypt(payload)
+
+        packet[0x34] = checksum & 0xff
+        packet[0x35] = checksum >> 8
+
+        for i in range(len(payload)):
+            packet.append(payload[i])
+
+        checksum = 0xbeaf
+        for i in range(len(packet)):
+            checksum += packet[i]
+            checksum = checksum & 0xffff
+        packet[0x20] = checksum & 0xff
+        packet[0x21] = checksum >> 8
+
+        start_time = time.time()
+        with self.lock:
+            while True:
+                try:
+                    self.cs.sendto(packet, self.host)
+                    self.cs.settimeout(1)
+                    response = self.cs.recvfrom(2048)
+                    break
+                except socket.timeout:
+                    if (time.time() - start_time) > self.timeout:
+                        raise
+        return bytearray(response[0])
+
+    # Send a request
+    # Returns decrypted payload
+    # Device's memory data is structured in an array of bytes, word (2 bytes) aligned
+    # input_payload should be a bytearray
+    # There are three known different request types (commands)
+    # 1. write a word (2 bytes) at a given position (position counted in words)
+    #    Command example
+    #      0x01, 0x06, 0x00, 0x04, 0x28, 0x0A
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x06 - write word at a given position 
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte which is memory data word's index
+    #        0x04 - the fifth word in memory data 
+    #      the bytes to be written
+    #        0x28, 0x0A - cooling max_temp (sh1) = 40, cooling min_temp (sl1) = 10
+    #    No error confirmation response 
+    #      0x01, 0x06, 0x00, 0x04, 0x28, 0x0A
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x06 - write word at a given position 
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte which is memory data word's index
+    #        0x04 - the fifth word in memory data 
+    #      the bytes written
+    #        0x28, 0x0A - cooling max_temp (sh1) = 40, cooling min_temp (sl1) = 10
+    # 2. write several words (multiple of 2 bytes) at a given position (position counted in words)
+    #    Command example
+    #      0x01, 0x10, 0x00, 0x07, 0x00, 0x02, 0x04, 0x08, 0x14, 0x10, 0x02
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x10 - write several words at a given position 
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte representing memory data word's index
+    #        0x07 - the eighth word in memory data
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte representing the number of words (2 bytes) to be written
+    #        0x02 - 2 words
+    #      a byte representing the number of bytes to be written (previous word multiplied by 2)
+    #        0x04 - 4 bytes
+    #      the bytes to be written
+    #        0x08, 0x14, 0x10, 0x02 - hour = 8, min = 20, sec = 10, weekday = 2 = Tuesday
+    #    No error confirmation response
+    #      0x01, 0x10, 0x00, 0x08, 0x00, 0x02
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x10 - write several words at a given position 
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte representing memory data word's index
+    #        0x07 - the eighth word in memory data
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte representing the number of words (2 bytes) written
+    #        0x02 - 2 words
+    # 3. read memory data from a given position (position counted in words)
+    #    Command example
+    #      0x01, 0x03, 0x00, 0x07, 0x00, 0x02
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x03 - read several words at a given position 
+    #      an unknown byte (always 0x00)
+    #        0x00
+    #      a byte representing memory data word's index
+    #        0x07 - the eighth word in memory data
+    #      a byte representing the number of words to be read
+    #        0x02 - 2 words
+    #    No error confirmation response
+    #      0x01, 0x03, 0x04, 0x08, 0x14, 0x10, 0x02
+    #      first byte 
+    #        0x01 - header
+    #      a byte representing command type
+    #        0x03 - read command 
+    #      a byte representing the number of bytes read
+    #        0x04 - 4 bytes 
+    #      the memory data bytes
+    #        0x08, 0x14, 0x10, 0x02 - hour = 8, min = 20, sec = 10, weekday = 2 = Tuesday
+    # Error responses for any command type
+    #      0x01, 0xXX, 0xYY where
+    #      first byte 
+    #        0x01 - header
+    #      second byte - Most significant bit 1 (error), last significant bits is the command type
+    #        e.g. 0x90 - error in command type 0x10
+    #      third byte
+    #        0xYY - error type
+    #        0x01 - Unknown command
+    #        0x02 - Length missing or too big
+    #        0x03 - Wrong length
+    # New behavior: raises a ValueError if the device response indicates an error or CRC check fails
+    # The function prepends length (2 bytes) and appends CRC
+    def send_request(self, input_payload):
+        for i in range(1, 3):
+            crc = CRC16(modbus_flag = True).calculate(bytes(input_payload))
+            if crc == None:
+                _LOGGER.error("[%s] CRC16 returned None, step %s.", self._host, i)
+            else:
+                break
+                
+        # first byte is length, +2 for CRC16
+        request_payload = bytearray([len(input_payload) + 2,0x00])
+        request_payload.extend(input_payload)
+
+        # append CRC
+        request_payload.append(crc & 0xFF)
+        request_payload.append((crc >> 8) & 0xFF)
+
+        # send to device
+        response = self.send_packet(0x6a, request_payload)
+
+        # check for error
+        err = response[0x22] | (response[0x23] << 8)
+        if err:
+            raise ValueError('broadlink_response_error',err)
+      
+        response_payload = bytearray(self.decrypt(bytes(response[0x38:])))
+        
+        # experimental check on CRC in response (first 2 bytes are len, and trailing bytes are crc)
+        response_payload_len = response_payload[0]
+        if response_payload_len + 2 > len(response_payload):
+            raise ValueError('hysen_response_error','first byte of response is not length')
+        crc = CRC16(modbus_flag=True).calculate(bytes(response_payload[2:response_payload_len]))
+        if (response_payload[response_payload_len] == crc & 0xFF) and \
+           (response_payload[response_payload_len+1] == (crc >> 8) & 0xFF):
+            return_payload = response_payload[2:response_payload_len]
+        else:
+            raise ValueError('hysen_response_error','CRC check on response failed')
+            
+        # check if return response is right
+        if (input_payload[0:2] == bytearray([0x01, 0x06])) and \
+           (input_payload != return_payload):
+            _LOGGER.error("[%s] request %s response %s",
+                self.host,
+                ' '.join(format(x, '02x') for x in bytearray(input_payload)),
+                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
+            self.auth()
+            raise ValueError('hysen_response_error','response is wrong')
+        elif (input_payload[0:2] == bytearray([0x01, 0x10])) and \
+             (input_payload[0:6] != return_payload):
+            _LOGGER.error("[%s] request %s response %s",
+                self.host,
+                ' '.join(format(x, '02x') for x in bytearray(input_payload)),
+                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
+            self.auth()
+            raise ValueError('hysen_response_error','response is wrong')
+        elif (input_payload[0:2] == bytearray([0x01, 0x03])) and \
+             ((input_payload[0:2] != return_payload[0:2]) or \
+             ((2 * input_payload[5]) != return_payload[2]) or \
+             ((2 * input_payload[5]) != len(return_payload[3:]))):
+            _LOGGER.error("[%s] request %s response %s",
+                self.host,
+                ' '.join(format(x, '02x') for x in bytearray(input_payload)),
+                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
+            self.auth()
+            raise ValueError('hysen_response_error','response is wrong')
+        else:
+            return return_payload
+
+"""
+Hysen Heating Thermostat Controller Interface
+Hysen HY03-x-Wifi device and derivative
+http://www.xmhysen.com/products_detail/productId=197.html
+"""
 
 HYSEN_HEAT_REMOTE_LOCK_OFF      = 0
 HYSEN_HEAT_REMOTE_LOCK_ON       = 1
@@ -52,10 +395,10 @@ HYSEN_HEAT_DEFAULT_TARGET_TEMP  = 22
 HYSEN_HEAT_DEFAULT_HYSTERESIS   = 2
 HYSEN_HEAT_DEFAULT_CALIBRATION  = 0.0
 
-class HysenHeatingDevice(device):
+class HysenHeatingDevice(broadlink_device):
     
     def __init__ (self, host, mac, devtype, timeout):
-        device.__init__(self, host, mac, devtype, timeout)
+        broadlink_device.__init__(self, host, mac, devtype, timeout)
         self.type = "Hysen Heating Thermostat Controller"
         self._host = host[0]
         
@@ -108,169 +451,6 @@ class HysenHeatingDevice(device):
         self.we_period6_temp = 0
         self.unknown2 = 0
         self.unknown3 = 0
-
-    # Send a request
-    # Returns decrypted payload
-    # Device's memory data is structured in an array of bytes, word (2 bytes) aligned
-    # input_payload should be a bytearray
-    # There are three known different request types (commands)
-    # 1. write a word (2 bytes) at a given position (position counted in words)
-    #    Command example
-    #      0x01, 0x06, 0x00, 0x04, 0x63, 0x05
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x06 - write word at a given position 
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte which is memory data word's index
-    #        0x04 - the fifth word in memory data 
-    #      the bytes to be written
-    #        0x63, 0x05 - max_temp (svh) = 99, min_temp (svl) = 5
-    #    No error confirmation response 
-    #      0x01, 0x06, 0x00, 0x04, 0x63, 0x05
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x06 - write word at a given position 
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte which is memory data word's index
-    #        0x04 - the fifth word in memory data 
-    #      the bytes written
-    #        0x63, 0x05 - max_temp (svh) = 99, min_temp (svl) = 5
-    # 2. write several words (multiple of 2 bytes) at a given position (position counted in words)
-    #    Command example
-    #      0x01, 0x10, 0x00, 0x08, 0x00, 0x02, 0x04, 0x08, 0x14, 0x10, 0x02
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x10 - write several words at a given position 
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte representing memory data word's index
-    #        0x08 - the ninth word in memory data
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte representing the number of words (2 bytes) to be written
-    #        0x02 - 2 words
-    #      a byte representing the number of bytes to be written (previous word multiplied by 2)
-    #        0x04 - 4 bytes
-    #      the bytes to be written
-    #        0x08, 0x14, 0x10, 0x02 - hour = 8, min = 20, sec = 10, weekday = 2 = Tuesday
-    #    No error confirmation response
-    #      0x01, 0x10, 0x00, 0x08, 0x00, 0x02
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x10 - write several words at a given position 
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte representing memory data word's index
-    #        0x08 - the ninth word in memory data
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte representing the number of words (2 bytes) written
-    #        0x02 - 2 words
-    # 3. read memory data from a given position (position counted in words)
-    #    Command example
-    #      0x01, 0x03, 0x00, 0x08, 0x00, 0x02
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x03 - read several words at a given position 
-    #      an unknown byte (always 0x00)
-    #        0x00
-    #      a byte representing memory data word's index
-    #        0x08 - the ninth word in memory data
-    #      a byte representing the number of words to be read
-    #        0x02 - 2 words
-    #    No error confirmation response
-    #      0x01, 0x03, 0x04, 0x08, 0x14, 0x10, 0x02
-    #      first byte 
-    #        0x01 - header
-    #      a byte representing command type
-    #        0x03 - read command 
-    #      a byte representing the number of bytes read
-    #        0x04 - 4 bytes 
-    #      the memory data bytes
-    #        0x08, 0x14, 0x10, 0x02 - hour = 8, min = 20, sec = 10, weekday = 2 = Tuesday
-    # Error responses for any command type
-    #      0x01, 0xXX, 0xYY where
-    #      first byte 
-    #        0x01 - header
-    #      second byte - Most significant bit 1 (error), last significant bits is the command type
-    #        e.g. 0x90 - error in command type 0x10
-    #      third byte
-    #        0xYY - error type
-    #        0x01 - Unknown command
-    #        0x02 - Length missing or too big
-    #        0x03 - Wrong length
-    # New behavior: raises a ValueError if the device response indicates an error or CRC check fails
-    # The function prepends length (2 bytes) and appends CRC
-    def send_request(self, input_payload):
-        for i in range(1, 3):
-            crc = CRC16(modbus_flag = True).calculate(bytes(input_payload))
-            if crc == None:
-                _LOGGER.error("[%s] CRC16 returned None, step %s.", self._host, i)
-            else:
-                break
-        
-        # first byte is length, +2 for CRC16
-        request_payload = bytearray([len(input_payload) + 2,0x00])
-        request_payload.extend(input_payload)
-
-        # append CRC
-        request_payload.append(crc & 0xFF)
-        request_payload.append((crc >> 8) & 0xFF)
-
-        # send to device
-        response = self.send_packet(0x6a, request_payload)
-
-        # check for error
-        err = response[0x22] | (response[0x23] << 8)
-        if err:
-            raise ValueError('broadlink_response_error',err)
-      
-        response_payload = bytearray(self.decrypt(bytes(response[0x38:])))
-        
-        # check on CRC in response (first 2 bytes are len, and trailing bytes are crc)
-        response_payload_len = response_payload[0]
-        if response_payload_len + 2 > len(response_payload):
-            raise ValueError('hysen_response_error','first byte of response is not length')
-        crc = CRC16(modbus_flag=True).calculate(bytes(response_payload[2:response_payload_len]))
-        if (response_payload[response_payload_len] == crc & 0xFF) and \
-           (response_payload[response_payload_len+1] == (crc >> 8) & 0xFF):
-            return_payload = response_payload[2:response_payload_len]
-        else:
-            raise ValueError('hysen_response_error','CRC check on response failed')
-            
-        # check if return response is right
-        if (input_payload[0:2] == bytearray([0x01, 0x06])) and \
-           (input_payload != return_payload):
-            _LOGGER.debug("[%s] request %s response %s", 
-                self._host, 
-                ' '.join(format(x, '02x') for x in bytearray(input_payload)), 
-                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
-            raise ValueError('hysen_response_error','response is wrong')
-        elif (input_payload[0:2] == bytearray([0x01, 0x10])) and \
-             (input_payload[0:6] != return_payload):
-            _LOGGER.debug("[%s] request %s response %s", 
-                self._host, 
-                ' '.join(format(x, '02x') for x in bytearray(input_payload)), 
-                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
-            raise ValueError('hysen_response_error','response is wrong')
-        elif (input_payload[0:2] == bytearray([0x01, 0x03])) and \
-             ((input_payload[0:2] != return_payload[0:2]) or \
-             ((2 * input_payload[5]) != return_payload[2]) or \
-             ((2 * input_payload[5]) != len(return_payload[3:]))):
-            _LOGGER.debug("[%s] request %s response %s", 
-                self._host, 
-                ' '.join(format(x, '02x') for x in bytearray(input_payload)), 
-                ' '.join(format(x, '02x') for x in bytearray(return_payload)))
-            raise ValueError('hysen_response_error','response is wrong')
-        else:
-            return return_payload
 
     # set lock and power
     # 0x01, 0x06, 0x00, 0x00, 0x0r, 0xap
@@ -1292,3 +1472,4 @@ class HysenHeatingDevice(device):
         self.we_period6_temp = float(_response[46] / 2.0)
         self.unknown2 = _response[47]
         self.unknown3 = _response[48]
+
