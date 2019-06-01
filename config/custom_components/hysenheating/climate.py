@@ -1,6 +1,6 @@
 """
 Support for Hysen Thermostat Controller for floor heating.
-Hysen HY03-1-Wifi device
+Hysen HY03-1-Wifi device and derivative
 http://www.xmhysen.com/products_detail/productId=197.html
 """
 
@@ -92,6 +92,8 @@ STATE_SENSOR_INTERNAL   = "internal"
 STATE_SENSOR_EXTERNAL   = "external"
 STATE_SENSOR_INT_EXT    = "int_ext"
 
+#STATE_IDLE              = "off"
+
 KEY_LOCK_MODES = [
     STATE_UNLOCKED, 
     STATE_LOCKED 
@@ -105,7 +107,8 @@ SCHEDULE_MODES = [
 
 OPERATION_MODES = [
     STATE_MANUAL, 
-    STATE_AUTO 
+    STATE_AUTO,
+    STATE_IDLE
 ]
 
 HYSEN_KEY_LOCK_TO_HASS = {
@@ -219,8 +222,9 @@ ATTR_KEY_LOCK             = 'key_lock'
 ATTR_VALVE_STATE          = 'valve_state'
 ATTR_POWER_STATE          = 'power_state'
 ATTR_MANUAL_OVER_AUTO     = 'manual_over_auto'
-ATTR_ROOM_TEMP            = 'room_temp'
+                                       
 ATTR_SENSOR               = 'sensor'
+ATTR_ROOM_TEMP            = 'room_temp'
 ATTR_EXTERNAL_TEMP        = 'external_temp'
 ATTR_EXTERNAL_TARGET_TEMP = 'external_limit_temp'
 ATTR_HYSTERESIS           = 'hysteresis'
@@ -590,12 +594,18 @@ class HysenHeating(ClimateDevice):
     @property
     def current_operation(self):
         """Return the current operation mode."""
-        return HYSEN_MODE_TO_HASS[self._hysen_device.operation_mode]
+        if (self.is_on):
+            return HYSEN_MODE_TO_HASS[self._hysen_device.operation_mode]
+        else:
+            return STATE_IDLE
 
     @property
     def operation_list(self):
         """Returns the list of available operation modes."""
-        return OPERATION_MODES
+        if (self.current_operation == STATE_IDLE):
+            return [HYSEN_MODE_TO_HASS[self._hysen_device.operation_mode], STATE_IDLE]
+        else:
+            return OPERATION_MODES
 
     @property
     def current_temperature(self):
@@ -608,7 +618,10 @@ class HysenHeating(ClimateDevice):
     @property
     def target_temperature(self):
         """Returns the target temperature."""
-        return self._hysen_device.target_temp
+        if (self.current_operation != STATE_IDLE):
+            return self._hysen_device.target_temp
+        else:
+            return None
    
     @property
     def target_temperature_step(self):
@@ -635,9 +648,13 @@ class HysenHeating(ClimateDevice):
         """Returns the maximum supported temperature."""
         return self._hysen_device.max_temp
 
-    async def async_set_temperature(self, **kwargs):
+    async def async_set_temperature(self, target_temp = None, **kwargs):
         """Set new target temperature."""
-        target_temp = float(kwargs.get(ATTR_TEMPERATURE))
+        if target_temp == None:
+            target_temp = float(kwargs.get(ATTR_TEMPERATURE))
+#        _LOGGER.error("[%s] target temp %s", 
+#                self._host, 
+#                target_temp)
         await self._try_command(
             "Error in set_temperature", 
             self._hysen_device.set_target_temp, 
@@ -652,24 +669,35 @@ class HysenHeating(ClimateDevice):
         
     async def async_set_operation_mode(self, operation_mode):
         """Set operation mode."""
-        if operation_mode.lower() not in OPERATION_MODES:
+        operation_mode = operation_mode.lower()
+        if operation_mode not in OPERATION_MODES:
             _LOGGER.error("[%s] Error in async_set_operation_mode. Unknown operation mode \'%s\'.", 
                 self._host,
                 operation_mode)
             return
-        if (operation_mode.lower() != self.current_operation):
-            if (self.current_operation == STATE_AUTO):
-                if (HASS_MANUAL_OVER_AUTO_TO_HYSEN[self._hysen_device.manual_over_auto] == True):
-                    operation_mode = STATE_AUTO
-                else:
+        if (operation_mode != self.current_operation):
+            if (self.is_on):
+                if (operation_mode != STATE_IDLE):
+                    if (self.current_operation == STATE_AUTO):
+                        if (HASS_MANUAL_OVER_AUTO_TO_HYSEN[self._hysen_device.manual_over_auto] == True):
+                            operation_mode = STATE_AUTO
+                        else:
+#                            _LOGGER.error("[%s] manual target temp %s", 
+#                                    self._host, 
+#                                    self._hysen_device.manual_target_temp)
+                            await self.async_set_temperature(self._hysen_device.manual_target_temp)
                     await self._try_command(
-                        "Error in set_temperature", 
-                        self._hysen_device.set_target_temp, 
-                        self._hysen_device.manual_target_temp)
-            await self._try_command(
-                "Error in set_operation_mode", 
-                self._hysen_device.set_operation_mode, 
-                HASS_MODE_TO_HYSEN[operation_mode.lower()])
+                        "Error in set_operation_mode", 
+                                                            
+                                                              
+                                    
+                                               
+                        self._hysen_device.set_operation_mode, 
+                        HASS_MODE_TO_HYSEN[operation_mode])
+                else:
+                    await self.async_turn_off()
+            else:
+                await self.async_turn_on()
 
     async def async_turn_on(self):
         """Turn device on."""
@@ -896,4 +924,4 @@ class HysenHeating(ClimateDevice):
                    (self._hysen_device.clock_hour != int(dt_util.as_local(dt_util.now()).strftime('%H'))) or \
                    (self._hysen_device.clock_min != int(dt_util.as_local(dt_util.now()).strftime('%M'))):
                     await self.async_set_time_now()
-       
+     
