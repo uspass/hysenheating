@@ -1,8 +1,8 @@
 {
-  "domain": "your_domain_name",
+  "domain": "hysenheating",
   "name": "hysenheating",
   "documentation": "https://github.com/uspass/hysenheating/blob/master/README.md",
   "dependencies": [],
   "codeowners": ["@uss"],
-  "requirements": ["broadlink==0.9.0"]
+  "requirements": ["cryptography==2.6.1"]
 }
