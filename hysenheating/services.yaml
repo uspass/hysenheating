@@ -1,0 +1,416 @@
+set_key_lock:
+  name: Set key lock
+  description: Sets device key access.
+  target:
+    entity:
+      domain: climate
+  fields:
+    key_lock:
+      name: Key lock
+      description: New value for key access.
+      required: true
+      default: 'unlocked'
+      example: 'unlocked'
+      selector:
+        select:
+          options:
+            - 'unlocked'
+            - 'locked'
+
+set_sensor:
+  name: Set sensor
+  description: Sets sensor type.
+  target:
+    entity:
+      domain: climate
+  fields:
+    sensor:
+      name: Sensor
+      description: New value for sensor type.
+      required: true
+      default: 'internal'
+      example: 'internal'
+      selector:
+        select:
+          options:
+            - 'internal'
+            - 'external'
+            - 'int_ext'
+
+set_hvac_mode:
+  name: Set hvac mode
+  description: Sets hvac mode.
+  target:
+    entity:
+      domain: climate
+  fields:
+    hvac_mode:
+      name: Hvac mode
+      description: New value for hvac mode.
+      required: true
+      default: 'auto'
+      example: 'auto'
+      selector:
+        select:
+          options:
+            - 'off'
+            - 'heat'
+            - 'auto'
+
+set_temperature:
+  name: Set temperature
+  description: Sets target temperature.
+  target:
+    entity:
+      domain: climate
+  fields:
+    temperature:
+      name: Temperature
+      description: New target temperature.
+      required: true
+      default: 22
+      example: '22'
+      selector:
+        number:
+          min: 5
+          max: 99
+          unit_of_measurement: "ºC"
+
+turn_on:
+  name: Turn on
+  description: Turn climate device on.
+  target:
+    entity:
+      domain: climate
+
+turn_off:
+  name: Turn off
+  description: Turn climate device off.
+  target:
+    entity:
+      domain: climate
+      
+set_external_max_temp:
+  name: Set maximum temperature for external sensor
+  description: Sets maximum admitted temperature for external sensor.
+  target:
+    entity:
+      domain: climate
+  fields:
+    external_max_temp:
+      name: External maximum temperature
+      description: New value for maximum admitted temperature for external sensor.
+      required: true
+      default: 42
+      example: '42'
+      selector:
+        number:
+          min: 5
+          max: 99
+          unit_of_measurement: "ºC"
+
+set_hysteresis:
+  name: Set hysteresis
+  description: Sets hysteresis.
+  target:
+    entity:
+      domain: climate
+  fields:
+    hysteresis:
+      name: Hysteresis
+      description: New value for hysteresis.
+      required: true
+      default: 2
+      example: '2'
+      selector:
+        number:
+          min: 1
+          max: 9
+
+set_calibration:
+  name: Set calibration
+  description: Sets calibration.
+  target:
+    entity:
+      domain: climate
+  fields:
+    calibration:
+      name: Calibration
+      description: New value for calibration.
+      required: true
+      default: 0
+      example: '2.5'
+      selector:
+        number:
+          min: -5.0
+          max: 5.0
+          step: 0.5
+
+set_max_temp:
+  name: Set maximum temperature
+  description: Sets maximum admitted temperature.
+  target:
+    entity:
+      domain: climate
+  fields:
+    max_temp:
+      name: Maximum temperature
+      description: New value for maximum admitted temperature.
+      required: true
+      default: 35
+      example: '35'
+      selector:
+        number:
+          min: 5
+          max: 99
+          unit_of_measurement: "ºC"
+
+set_min_temp:
+  name: Set minimum temperature
+  description: Sets minimum admitted temperature.
+  target:
+    entity:
+      domain: climate
+  fields:
+    min_temp:
+      name: Minimum temperature
+      description: New value for minimum admitted temperature.
+      required: true
+      default: 5
+      example: '5'
+      selector:
+        number:
+          min: 5
+          max: 99
+          unit_of_measurement: "ºC"
+
+set_frost_protection:
+  name: Set frost protection
+  description: Sets frost protection.
+  target:
+    entity:
+      domain: climate
+  fields:
+    frost_protection:
+      name: Frost protection
+      description: New value for frost protection.
+      required: true
+      default: 'off'
+      example: 'off'
+      selector:
+        select:
+          options:
+            - 'on'
+            - 'off'
+
+set_poweron:
+  name: Set poweron
+  description: Sets restore status at power on.
+  target:
+    entity:
+      domain: climate
+  fields:
+    poweron:
+      name: Poweron
+      description: Restore status at power on setting.
+      required: true
+      default: 'off'
+      example: 'off'
+      selector:
+        select:
+          options:
+            - 'on'
+            - 'off'
+
+set_time:
+  name: Set time
+  description: Sets time (or time now).
+  target:
+    entity:
+      domain: climate
+  fields:
+    now:
+      name: Now
+      description: Sets time now.
+      default: true
+      example: 'true'
+      selector:
+        boolean:
+    time:
+      description: Sets time.
+      default: '08:00:00'
+      example: '08:00:00'
+      selector:
+        text:
+    weekday:
+      name: Weekday
+      description: Set week day (1 - Monday, 7 Sunday).
+      default: 1
+      example: '1'
+      selector:
+        number:
+          min: 1
+          max: 7
+
+set_schedule:
+  name: Set schedule
+  description: Sets schedule.
+  target:
+    entity:
+      domain: climate
+  fields:
+    weekly_schedule:
+      name: Sets weekly schedule
+      description: New value weekly schedule.
+      default: '1234567'
+      example: '1234567'
+      selector:
+        select:
+          options:
+            - '12345'
+            - '123456'
+            - '1234567'
+    period1_time:
+      name: Period1 time
+      description: Sets start time for the 1st period.
+      default: '06:00'
+      example: '06:00'
+      selector:
+        text:
+    period1_temp:
+      name: Period1 temperature
+      description: New value for 1st period temperature.
+      default: 20
+      example: '20.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    period2_time:
+      name: Period2 time
+      description: Sets start time for the 2nd period.
+      default: '08:00'
+      example: '08:00'
+      selector:
+        text:
+    period2_temp:
+      name: Period2 temperature
+      description: New value for 2nd period temperature.
+      default: 15
+      example: '15.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    period3_time:
+      name: Period3 time
+      description: Sets start time for the 3rd period.
+      default: '11:30'
+      example: '11:30'
+      selector:
+        text:
+    period3_temp:
+      name: Period3 temperature
+      description: New value for 3rd period temperature.
+      default: 15
+      example: '15.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    period4_time:
+      name: Period4 time
+      description: Sets start time for the 4th period.
+      default: '12:30'
+      example: '12:30'
+      selector:
+        text:
+    period4_temp:
+      name: Period4 temperature
+      description: New value for 4th period temperature.
+      default: 15
+      example: '15.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    period5_time:
+      name: Period5 time
+      description: Sets start time for the 5th period.
+      default: '17:30'
+      example: '17:30'
+      selector:
+        text:
+    period5_temp:
+      name: Period5 temperature
+      description: New value for 5th period temperature.
+      default: 22
+      example: '22.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    period6_time:
+      name: Period6 time
+      description: Sets start time for the 6th period.
+      default: '22:00'
+      example: '22:00'
+      selector:
+        text:
+    period6_temp:
+      name: Period6 temperature
+      description: New value for 6th period temperature.
+      default: 15
+      example: '15.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    we_period1_time:
+      name: Weekend period1 time
+      description: Sets start time for the 1st period in weekend.
+      default: '08:00'
+      example: '08:00'
+      selector:
+        text:
+    we_period1_temp:
+      name: Weekend period1 temperature
+      description: New value for 1st period in weekend.
+      default: 22
+      example: '22.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
+    we_period2_time:
+      name: Weekend period2 time
+      description: Sets start time for the 2nd period in weekend.
+      default: '23:00'
+      example: '23:00'
+      selector:
+        text:
+    we_period2_temp:
+      name: Weekend period2 temperature
+      description: New value for 2nd period in weekend.
+      default: 15
+      example: '15.0'
+      selector:
+        number:
+          min: 5
+          max: 99
+          step: 0.5
+          unit_of_measurement: "ºC"
