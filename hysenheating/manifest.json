@@ -1,7 +1,7 @@
 {
   "domain": "hysenheating",
   "name": "Hysen Heating",
-  "version": "0.4.11",
+  "version": "0.4.12",
   "documentation": "https://github.com/uspass/hysenheating/blob/master/README.md",
   "dependencies": [],
   "codeowners": ["@uss"],
