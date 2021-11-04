@@ -5,6 +5,6 @@
   "documentation": "https://github.com/uspass/hysenheating/blob/master/README.md",
   "dependencies": [],
   "codeowners": ["@uss"],
-  "requirements": ["hysen==0.4.11"],
+  "requirements": ["hysen==0.4.12"],
   "iot_class": "local_polling"
 }
