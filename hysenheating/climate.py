@@ -578,48 +578,45 @@ class HysenHeating(ClimateEntity):
         return self._max_temp
 
     @property
-    def device_state_attributes(self):
+    def extra_state_attributes(self):
         """Return the specific state attributes of the device."""
-        attrs = {}
-        if self._available:
-            attrs.update({
-                ATTR_FWVERSION: self._fwversion,
-                ATTR_HVAC_MODE: self._hvac_mode,
-                ATTR_VALVE_STATE: self._valve_state,
-                ATTR_KEY_LOCK: self._key_lock,
-                ATTR_POWER_STATE: self._power_state,
-                ATTR_MANUAL_IN_AUTO: self._manual_in_auto,
-                ATTR_SENSOR: self._sensor,
-                ATTR_ROOM_TEMP: self._room_temp,
-                ATTR_EXTERNAL_TEMP: self._external_temp,
-                ATTR_EXTERNAL_MAX_TEMP: self._external_max_temp,
-                ATTR_HYSTERESIS: self._hysteresis,
-                ATTR_CALIBRATION: self._calibration,
-                ATTR_MAX_TEMP: self._max_temp,
-                ATTR_MIN_TEMP: self._min_temp,
-                ATTR_FROST_PROTECTION: self._frost_protection,
-                ATTR_POWERON: self._poweron,
-                ATTR_DEVICE_TIME: self._device_time,
-                ATTR_DEVICE_WEEKDAY: self._device_weekday,
-                ATTR_WEEKLY_SCHEDULE: self._schedule,
-                ATTR_PERIOD1_TIME: self._period1_time,
-                ATTR_PERIOD1_TEMP: self._period1_temp,
-                ATTR_PERIOD2_TIME: self._period2_time,
-                ATTR_PERIOD2_TEMP: self._period2_temp,
-                ATTR_PERIOD3_TIME: self._period3_time,
-                ATTR_PERIOD3_TEMP: self._period3_temp,
-                ATTR_PERIOD4_TIME: self._period4_time,
-                ATTR_PERIOD4_TEMP: self._period4_temp,
-                ATTR_PERIOD5_TIME: self._period5_time,
-                ATTR_PERIOD5_TEMP: self._period5_temp,
-                ATTR_PERIOD6_TIME: self._period6_time,
-                ATTR_PERIOD6_TEMP: self._period6_temp,
-                ATTR_WE_PERIOD1_TIME: self._we_period1_time,
-                ATTR_WE_PERIOD1_TEMP: self._we_period1_temp,
-                ATTR_WE_PERIOD2_TIME: self._we_period2_time,
-                ATTR_WE_PERIOD2_TEMP: self._we_period2_temp,
-            })
-        return attrs
+        return {
+            ATTR_FWVERSION: self._fwversion,
+            ATTR_HVAC_MODE: self._hvac_mode,
+            ATTR_VALVE_STATE: self._valve_state,
+            ATTR_KEY_LOCK: self._key_lock,
+            ATTR_POWER_STATE: self._power_state,
+            ATTR_MANUAL_IN_AUTO: self._manual_in_auto,
+            ATTR_SENSOR: self._sensor,
+            ATTR_ROOM_TEMP: self._room_temp,
+            ATTR_EXTERNAL_TEMP: self._external_temp,
+            ATTR_EXTERNAL_MAX_TEMP: self._external_max_temp,
+            ATTR_HYSTERESIS: self._hysteresis,
+            ATTR_CALIBRATION: self._calibration,
+            ATTR_MAX_TEMP: self._max_temp,
+            ATTR_MIN_TEMP: self._min_temp,
+            ATTR_FROST_PROTECTION: self._frost_protection,
+            ATTR_POWERON: self._poweron,
+            ATTR_DEVICE_TIME: self._device_time,
+            ATTR_DEVICE_WEEKDAY: self._device_weekday,
+            ATTR_WEEKLY_SCHEDULE: self._schedule,
+            ATTR_PERIOD1_TIME: self._period1_time,
+            ATTR_PERIOD1_TEMP: self._period1_temp,
+            ATTR_PERIOD2_TIME: self._period2_time,
+            ATTR_PERIOD2_TEMP: self._period2_temp,
+            ATTR_PERIOD3_TIME: self._period3_time,
+            ATTR_PERIOD3_TEMP: self._period3_temp,
+            ATTR_PERIOD4_TIME: self._period4_time,
+            ATTR_PERIOD4_TEMP: self._period4_temp,
+            ATTR_PERIOD5_TIME: self._period5_time,
+            ATTR_PERIOD5_TEMP: self._period5_temp,
+            ATTR_PERIOD6_TIME: self._period6_time,
+            ATTR_PERIOD6_TEMP: self._period6_temp,
+            ATTR_WE_PERIOD1_TIME: self._we_period1_time,
+            ATTR_WE_PERIOD1_TEMP: self._we_period1_temp,
+            ATTR_WE_PERIOD2_TIME: self._we_period2_time,
+            ATTR_WE_PERIOD2_TEMP: self._we_period2_temp,
+        }
 
     @property
     def is_on(self):
